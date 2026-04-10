@@ -1,0 +1,19 @@
+version: "3.8"
+
+services:
+  readwise-remarkable:
+    build: .
+    image: readwise-remarkable:latest
+    container_name: readwise-remarkable
+    restart: unless-stopped
+    environment:
+      - READWISE_TOKEN=your_readwise_access_token_here
+      - REMARKABLE_FOLDER=Readwise
+      - SYNC_LOCATIONS=new,later,shortlist
+      - SYNC_TAG=remarkable
+      - SYNC_INTERVAL=1800  # 30 minutes
+    volumes:
+      - rmapi_data:/data
+
+volumes:
+  rmapi_data:
