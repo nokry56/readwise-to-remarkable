@@ -19,7 +19,7 @@ WORKDIR /app
 
 # Clone the repo and install Python deps
 RUN apt-get update && apt-get install -y --no-install-recommends git \
-    && git clone https://github.com/donmerendolo/readwise-to-remarkable.git . \
+    && git clone https://github.com/nokry56/readwise-to-remarkable-fork.git . \
     && apt-get purge -y git && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/*
 
