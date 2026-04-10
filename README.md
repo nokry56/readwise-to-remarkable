@@ -13,7 +13,7 @@ In Unraid web UI:
 2. Click the **gear icon** (settings) at bottom-left
 3. Under **Template Repositories**, add:
    ```
-   https://github.com/twoolsey27/unraid-templates
+   https://github.com/nokry56/unraid-templates
    ```
 4. Click **Save**
 
@@ -26,7 +26,7 @@ SSH into your Unraid server and run:
 ```bash
 docker run -it --rm \
   -v /mnt/user/appdata/readwise-remarkable:/data \
-  ghcr.io/twoolsey27/readwise-to-remarkable:latest rmapi
+  ghcr.io/nokry56/readwise-to-remarkable:latest rmapi
 ```
 
 This opens rmapi interactively. It will display a URL and code. Open the URL in your browser, enter the code, and authorize. The auth token gets saved to `/data/.rmapi` and survives container restarts.

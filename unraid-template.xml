@@ -1,17 +1,17 @@
 <?xml version="1.0"?>
 <Container version="2">
   <Name>readwise-remarkable</Name>
-  <Repository>ghcr.io/twoolsey27/readwise-to-remarkable:latest</Repository>
-  <Registry>https://ghcr.io/twoolsey27/readwise-to-remarkable</Registry>
+  <Repository>ghcr.io/nokry56/readwise-to-remarkable:latest</Repository>
+  <Registry>https://ghcr.io/nokry56/readwise-to-remarkable</Registry>
   <Network>bridge</Network>
   <Shell>bash</Shell>
   <Privileged>false</Privileged>
-  <Support>https://github.com/twoolsey27/readwise-to-remarkable</Support>
+  <Support>https://github.com/nokry56/readwise-to-remarkable</Support>
   <Project>https://github.com/donmerendolo/readwise-to-remarkable</Project>
   <Overview>Automatically sync documents tagged "remarkable" from Readwise Reader to your reMarkable tablet via rmapi.</Overview>
   <Category>Productivity:</Category>
   <WebUI/>
-  <TemplateURL>https://raw.githubusercontent.com/twoolsey27/unraid-templates/main/readwise-remarkable.xml</TemplateURL>
+  <TemplateURL>https://raw.githubusercontent.com/nokry56/unraid-templates/main/readwise-remarkable.xml</TemplateURL>
   <Icon>https://raw.githubusercontent.com/donmerendolo/readwise-to-remarkable/master/image.png</Icon>
   <ExtraParams/>
   <Description>Syncs Readwise Reader articles to reMarkable tablet. Tag documents with "remarkable" in Readwise Reader and they get uploaded as EPUBs to your reMarkable cloud.</Description>
