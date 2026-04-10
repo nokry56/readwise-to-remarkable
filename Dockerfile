@@ -8,8 +8,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Install rmapi (reMarkable cloud API tool)
-ARG RMAPI_VERSION=0.0.28
-RUN curl -fsSL "https://github.com/ddvk/rmapi/releases/download/v${RMAPI_VERSION}/rmapi-linux-x86_64.tar.gz" \
+ARG RMAPI_VERSION=0.0.32
+RUN curl -fsSL "https://github.com/ddvk/rmapi/releases/download/v${RMAPI_VERSION}/rmapi-linux-amd64.tar.gz" \
     -o /tmp/rmapi.tar.gz \
     && tar xzf /tmp/rmapi.tar.gz -C /usr/local/bin/ \
     && chmod +x /usr/local/bin/rmapi \
