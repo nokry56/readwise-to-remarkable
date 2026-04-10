@@ -8,7 +8,7 @@
   <Privileged>false</Privileged>
   <Support>https://github.com/nokry56/readwise-to-remarkable</Support>
   <Project>https://github.com/donmerendolo/readwise-to-remarkable</Project>
-  <Overview>Automatically sync documents from Readwise Reader to your reMarkable tablet via rmapi. Removes archived/seen items. Optionally syncs weekly Economist PDF.</Overview>
+  <Overview>Automatically sync documents from Readwise Reader to your reMarkable tablet via rmapi. Removes archived/seen items. Optionally syncs weekly Economist PDF. Syncs highlights from reMarkable back to Readwise.</Overview>
   <Category>Productivity:</Category>
   <WebUI/>
   <TemplateURL>https://raw.githubusercontent.com/nokry56/unraid-templates/main/readwise-remarkable.xml</TemplateURL>
@@ -21,5 +21,6 @@
   <Config Name="Sync Tag" Target="SYNC_TAG" Default="*" Mode="" Description="Tag to filter by (* for all documents)" Type="Variable" Display="always" Required="false" Mask="false"/>
   <Config Name="Sync Interval" Target="SYNC_INTERVAL" Default="1800" Mode="" Description="Seconds between sync runs (1800 = 30 min)" Type="Variable" Display="always" Required="false" Mask="false"/>
   <Config Name="Economist Enabled" Target="ECONOMIST_ENABLED" Default="false" Mode="" Description="Enable weekly Economist PDF sync — saves to Readwise Reader, then synced to reMarkable" Type="Variable" Display="always" Required="false" Mask="false"/>
+  <Config Name="Highlight Sync" Target="HIGHLIGHT_SYNC_ENABLED" Default="false" Mode="" Description="Sync highlights from reMarkable back to Readwise (EPUBs and PDFs)" Type="Variable" Display="always" Required="false" Mask="false"/>
   <Config Name="Persistent Data" Target="/data" Default="/mnt/user/appdata/readwise-remarkable" Mode="rw" Description="Stores rmapi auth token and export tracker" Type="Path" Display="always" Required="true" Mask="false"/>
 </Container>

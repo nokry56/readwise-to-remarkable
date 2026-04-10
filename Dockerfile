@@ -41,6 +41,7 @@ ENV REMARKABLE_FOLDER="Readwise"
 ENV SYNC_LOCATIONS="new,later,shortlist"
 ENV SYNC_TAG="remarkable"
 ENV ECONOMIST_ENABLED="false"
+ENV HIGHLIGHT_SYNC_ENABLED="false"
 
 VOLUME ["/data"]
 

@@ -13,6 +13,7 @@ services:
       - SYNC_TAG=*
       - SYNC_INTERVAL=1800  # 30 minutes
       - ECONOMIST_ENABLED=true
+      - HIGHLIGHT_SYNC_ENABLED=true
     volumes:
       - rmapi_data:/data
 

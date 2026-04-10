@@ -10,7 +10,8 @@ Based on [donmerendolo/readwise-to-remarkable](https://github.com/donmerendolo/r
 
 - **Sync unseen documents** from Readwise Reader to reMarkable
 - **Auto-cleanup**: documents that are archived, seen, or deleted in Reader are removed from reMarkable
-- **Economist sync**: weekly PDF from GitHub, uploaded to a separate reMarkable folder
+- **Economist sync**: weekly PDF from GitHub, saved to Readwise Reader
+- **Highlight sync**: highlights made on reMarkable are synced back to Readwise (EPUBs and PDFs)
 - PDFs downloaded directly, articles converted to EPUB
 - Persistent tracker prevents duplicate syncs
 
@@ -59,6 +60,7 @@ This opens rmapi interactively. It will display a URL and code. Open the URL in 
 | `SYNC_TAG` | `*` | Tag to filter documents by (`*` for all) |
 | `SYNC_INTERVAL` | `1800` | Seconds between sync runs (30 min) |
 | `ECONOMIST_ENABLED` | `false` | Enable weekly Economist PDF sync to Readwise |
+| `HIGHLIGHT_SYNC_ENABLED` | `false` | Sync highlights from reMarkable back to Readwise |
 
 ## How It Works
 
@@ -72,6 +74,9 @@ On each cycle, any previously-synced document that is no longer in the configure
 
 ### Economist sync
 When enabled, checks [evanbio/The_Economist](https://github.com/evanbio/The_Economist) for the latest weekly edition (published Sundays ~9 AM CST). Saves the PDF to your Readwise Reader library with title "The Economist: [Date]". The normal sync loop then handles uploading it to reMarkable like any other document.
+
+### Highlight sync (reMarkable → Readwise)
+When enabled, on each cycle the container downloads annotated documents from reMarkable cloud via `rmapi get`, extracts highlighted text using [rmscene](https://github.com/ricklupton/rmscene) (for EPUBs) and [PyMuPDF](https://github.com/pymupdf/PyMuPDF) (for PDFs), then pushes the highlights to Readwise via the [v2 Highlights API](https://readwise.io/api_deets). Deduplication is handled by both a local tracker and Readwise's built-in dedup (title/author/text).
 
 ## Troubleshooting
 
@@ -95,4 +100,9 @@ docker exec readwise-remarkable python sync.py
 **Run Economist sync manually:**
 ```bash
 docker exec readwise-remarkable python economist.py
+```
+
+**Run highlight sync manually:**
+```bash
+docker exec readwise-remarkable python highlights.py
 ```

@@ -19,6 +19,9 @@ tag = ${SYNC_TAG}
 
 [economist]
 enabled = ${ECONOMIST_ENABLED:-false}
+
+[highlights]
+enabled = ${HIGHLIGHT_SYNC_ENABLED:-false}
 EOF
 
 # Restore rmapi auth from persistent storage
@@ -60,6 +63,9 @@ if [ "$1" = "once" ]; then
     if [ "${ECONOMIST_ENABLED:-false}" = "true" ]; then
         python -u economist.py
     fi
+    if [ "${HIGHLIGHT_SYNC_ENABLED:-false}" = "true" ]; then
+        python -u highlights.py
+    fi
     # Persist state
     cp /app/exported_documents.json /data/exported_documents.json 2>/dev/null || true
     cp "${RMAPI_CONF}" /data/rmapi.conf 2>/dev/null || true
@@ -73,6 +79,7 @@ echo "  Locations: ${SYNC_LOCATIONS}"
 echo "  Tag: ${SYNC_TAG}"
 echo "  Folder: ${REMARKABLE_FOLDER}"
 echo "  Economist: ${ECONOMIST_ENABLED:-false}"
+echo "  Highlight sync: ${HIGHLIGHT_SYNC_ENABLED:-false}"
 echo ""
 
 while true; do
@@ -82,6 +89,11 @@ while true; do
     # Run Economist sync if enabled
     if [ "${ECONOMIST_ENABLED:-false}" = "true" ]; then
         python -u economist.py || echo "Economist sync failed, will retry next interval"
+    fi
+
+    # Run highlight sync if enabled
+    if [ "${HIGHLIGHT_SYNC_ENABLED:-false}" = "true" ]; then
+        python -u highlights.py || echo "Highlight sync failed, will retry next interval"
     fi
 
     # Persist state after each run
