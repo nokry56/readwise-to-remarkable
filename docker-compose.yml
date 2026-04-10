@@ -6,14 +6,17 @@ services:
     image: readwise-remarkable:latest
     container_name: readwise-remarkable
     restart: unless-stopped
+    ports:
+      - "8080:8080"
     environment:
       - READWISE_TOKEN=your_readwise_access_token_here
       - REMARKABLE_FOLDER=Readwise
       - SYNC_LOCATIONS=new,later,shortlist,feed
       - SYNC_TAG=*
-      - SYNC_INTERVAL=1800  # 30 minutes
+      - SYNC_INTERVAL=1800
       - ECONOMIST_ENABLED=true
       - HIGHLIGHT_SYNC_ENABLED=true
+      - WEBUI_PORT=8080
     volumes:
       - rmapi_data:/data
 

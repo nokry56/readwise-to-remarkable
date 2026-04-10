@@ -30,18 +30,24 @@ RUN mkdir -p /data /root/.config/rmapi
 
 ENV PYTHONUNBUFFERED=1
 
+# Web UI (Docker-only, not in upstream fork)
+COPY webui.py /webui.py
+
 # Entrypoint script
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
-# Default sync interval: 30 minutes (in seconds)
+# Default settings
 ENV SYNC_INTERVAL=1800
 ENV READWISE_TOKEN=""
 ENV REMARKABLE_FOLDER="Readwise"
-ENV SYNC_LOCATIONS="new,later,shortlist"
-ENV SYNC_TAG="remarkable"
+ENV SYNC_LOCATIONS="new,later,shortlist,feed"
+ENV SYNC_TAG="*"
 ENV ECONOMIST_ENABLED="false"
 ENV HIGHLIGHT_SYNC_ENABLED="false"
+ENV WEBUI_PORT=8080
+
+EXPOSE 8080
 
 VOLUME ["/data"]
 
