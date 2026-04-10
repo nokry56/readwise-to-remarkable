@@ -1,8 +1,18 @@
 # Readwise-to-reMarkable Docker
 
-Syncs Readwise Reader articles to your reMarkable tablet. Tag documents with "remarkable" in Readwise Reader and they auto-upload as EPUBs via [rmapi](https://github.com/ddvk/rmapi).
+Syncs Readwise Reader articles to your reMarkable tablet. Unseen documents from configured locations auto-upload as EPUBs/PDFs via [rmapi](https://github.com/ddvk/rmapi). Archived or seen items are automatically removed from reMarkable.
+
+Optionally syncs the latest weekly Economist PDF from [evanbio/The_Economist](https://github.com/evanbio/The_Economist).
 
 Based on [donmerendolo/readwise-to-remarkable](https://github.com/donmerendolo/readwise-to-remarkable).
+
+## Features
+
+- **Sync unseen documents** from Readwise Reader to reMarkable
+- **Auto-cleanup**: documents that are archived, seen, or deleted in Reader are removed from reMarkable
+- **Economist sync**: weekly PDF from GitHub, uploaded to a separate reMarkable folder
+- PDFs downloaded directly, articles converted to EPUB
+- Persistent tracker prevents duplicate syncs
 
 ## Unraid Setup
 
@@ -29,7 +39,7 @@ docker run -it --rm \
   ghcr.io/nokry56/readwise-to-remarkable:latest rmapi
 ```
 
-This opens rmapi interactively. It will display a URL and code. Open the URL in your browser, enter the code, and authorize. The auth token gets saved to `/data/.rmapi` and survives container restarts.
+This opens rmapi interactively. It will display a URL and code. Open the URL in your browser, enter the code, and authorize. The auth token gets saved to `/data/rmapi.conf` and survives container restarts.
 
 ### 3. Install from Apps tab
 
@@ -45,15 +55,23 @@ This opens rmapi interactively. It will display a URL and code. Open the URL in 
 |---|---|---|
 | `READWISE_TOKEN` | *(required)* | Your Readwise access token |
 | `REMARKABLE_FOLDER` | `Readwise` | Folder on reMarkable for uploads |
-| `SYNC_LOCATIONS` | `new,later,shortlist` | Readwise locations to sync from |
-| `SYNC_TAG` | `remarkable` | Tag to filter documents by |
+| `SYNC_LOCATIONS` | `new,later,shortlist,feed` | Readwise locations to sync from |
+| `SYNC_TAG` | `*` | Tag to filter documents by (`*` for all) |
 | `SYNC_INTERVAL` | `1800` | Seconds between sync runs (30 min) |
+| `ECONOMIST_ENABLED` | `false` | Enable weekly Economist PDF sync to Readwise |
 
-## Usage
+## How It Works
 
-1. In Readwise Reader, tag any article/document with `remarkable`
-2. The container syncs every 30 minutes (configurable)
-3. Documents appear in the "Readwise" folder on your reMarkable
+### Sync logic
+1. Fetches unseen documents from configured Readwise locations
+2. Converts articles to EPUB, downloads PDFs directly
+3. Uploads to reMarkable via rmapi
+
+### Cleanup logic
+On each cycle, any previously-synced document that is no longer in the configured locations (archived, seen, deleted, moved) is automatically removed from reMarkable.
+
+### Economist sync
+When enabled, checks [evanbio/The_Economist](https://github.com/evanbio/The_Economist) for the latest weekly edition (published Sundays ~9 AM CST). Saves the PDF to your Readwise Reader library with title "The Economist: [Date]". The normal sync loop then handles uploading it to reMarkable like any other document.
 
 ## Troubleshooting
 
@@ -64,12 +82,17 @@ docker logs readwise-remarkable
 
 **Re-authenticate rmapi:**
 ```bash
-docker exec -it readwise-remarkable rmapi
-# Then persist the new token:
-docker exec readwise-remarkable cp /root/.rmapi /data/.rmapi
+docker exec -it readwise-remarkable rmapi ls
+# Enter the device code when prompted, then:
+docker exec readwise-remarkable cp /root/.config/rmapi/rmapi.conf /data/rmapi.conf
 ```
 
 **Run sync manually:**
 ```bash
 docker exec readwise-remarkable python sync.py
+```
+
+**Run Economist sync manually:**
+```bash
+docker exec readwise-remarkable python economist.py
 ```

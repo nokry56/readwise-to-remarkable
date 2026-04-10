@@ -16,6 +16,9 @@ folder = ${REMARKABLE_FOLDER}
 [sync]
 locations = ${SYNC_LOCATIONS}
 tag = ${SYNC_TAG}
+
+[economist]
+enabled = ${ECONOMIST_ENABLED:-false}
 EOF
 
 # Restore rmapi auth from persistent storage
@@ -54,7 +57,10 @@ fi
 if [ "$1" = "once" ]; then
     echo "Running single sync..."
     python -u sync.py
-    # Persist tracker
+    if [ "${ECONOMIST_ENABLED:-false}" = "true" ]; then
+        python -u economist.py
+    fi
+    # Persist state
     cp /app/exported_documents.json /data/exported_documents.json 2>/dev/null || true
     cp "${RMAPI_CONF}" /data/rmapi.conf 2>/dev/null || true
     exit 0
@@ -66,11 +72,17 @@ echo "  Interval: ${SYNC_INTERVAL}s"
 echo "  Locations: ${SYNC_LOCATIONS}"
 echo "  Tag: ${SYNC_TAG}"
 echo "  Folder: ${REMARKABLE_FOLDER}"
+echo "  Economist: ${ECONOMIST_ENABLED:-false}"
 echo ""
 
 while true; do
     echo "--- Sync started at $(date) ---"
     python -u sync.py || echo "Sync failed, will retry next interval"
+
+    # Run Economist sync if enabled
+    if [ "${ECONOMIST_ENABLED:-false}" = "true" ]; then
+        python -u economist.py || echo "Economist sync failed, will retry next interval"
+    fi
 
     # Persist state after each run
     cp /app/exported_documents.json /data/exported_documents.json 2>/dev/null || true

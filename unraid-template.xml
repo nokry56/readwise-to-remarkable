@@ -8,17 +8,18 @@
   <Privileged>false</Privileged>
   <Support>https://github.com/nokry56/readwise-to-remarkable</Support>
   <Project>https://github.com/donmerendolo/readwise-to-remarkable</Project>
-  <Overview>Automatically sync documents tagged "remarkable" from Readwise Reader to your reMarkable tablet via rmapi.</Overview>
+  <Overview>Automatically sync documents from Readwise Reader to your reMarkable tablet via rmapi. Removes archived/seen items. Optionally syncs weekly Economist PDF.</Overview>
   <Category>Productivity:</Category>
   <WebUI/>
   <TemplateURL>https://raw.githubusercontent.com/nokry56/unraid-templates/main/readwise-remarkable.xml</TemplateURL>
   <Icon>https://raw.githubusercontent.com/donmerendolo/readwise-to-remarkable/master/image.png</Icon>
   <ExtraParams/>
-  <Description>Syncs Readwise Reader articles to reMarkable tablet. Tag documents with "remarkable" in Readwise Reader and they get uploaded as EPUBs to your reMarkable cloud.</Description>
+  <Description>Syncs Readwise Reader articles to reMarkable tablet. Unseen documents from configured locations get uploaded as EPUBs/PDFs. Archived or seen items are automatically removed from reMarkable. Optionally syncs weekly Economist PDF from GitHub.</Description>
   <Config Name="Readwise Token" Target="READWISE_TOKEN" Default="" Mode="" Description="Your Readwise access token from https://readwise.io/access_token" Type="Variable" Display="always" Required="true" Mask="true"/>
   <Config Name="reMarkable Folder" Target="REMARKABLE_FOLDER" Default="Readwise" Mode="" Description="Folder on reMarkable where documents are uploaded" Type="Variable" Display="always" Required="false" Mask="false"/>
-  <Config Name="Sync Locations" Target="SYNC_LOCATIONS" Default="new,later,shortlist" Mode="" Description="Readwise locations to sync from (comma-separated: new,later,shortlist,archive,feed)" Type="Variable" Display="always" Required="false" Mask="false"/>
-  <Config Name="Sync Tag" Target="SYNC_TAG" Default="remarkable" Mode="" Description="Tag name to filter documents by in Readwise" Type="Variable" Display="always" Required="false" Mask="false"/>
+  <Config Name="Sync Locations" Target="SYNC_LOCATIONS" Default="new,later,shortlist,feed" Mode="" Description="Readwise locations to sync from (comma-separated: new,later,shortlist,feed)" Type="Variable" Display="always" Required="false" Mask="false"/>
+  <Config Name="Sync Tag" Target="SYNC_TAG" Default="*" Mode="" Description="Tag to filter by (* for all documents)" Type="Variable" Display="always" Required="false" Mask="false"/>
   <Config Name="Sync Interval" Target="SYNC_INTERVAL" Default="1800" Mode="" Description="Seconds between sync runs (1800 = 30 min)" Type="Variable" Display="always" Required="false" Mask="false"/>
+  <Config Name="Economist Enabled" Target="ECONOMIST_ENABLED" Default="false" Mode="" Description="Enable weekly Economist PDF sync — saves to Readwise Reader, then synced to reMarkable" Type="Variable" Display="always" Required="false" Mask="false"/>
   <Config Name="Persistent Data" Target="/data" Default="/mnt/user/appdata/readwise-remarkable" Mode="rw" Description="Stores rmapi auth token and export tracker" Type="Path" Display="always" Required="true" Mask="false"/>
 </Container>

@@ -9,9 +9,10 @@ services:
     environment:
       - READWISE_TOKEN=your_readwise_access_token_here
       - REMARKABLE_FOLDER=Readwise
-      - SYNC_LOCATIONS=new,later,shortlist
-      - SYNC_TAG=remarkable
+      - SYNC_LOCATIONS=new,later,shortlist,feed
+      - SYNC_TAG=*
       - SYNC_INTERVAL=1800  # 30 minutes
+      - ECONOMIST_ENABLED=true
     volumes:
       - rmapi_data:/data
 
