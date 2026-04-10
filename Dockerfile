@@ -25,8 +25,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends git \
 
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Create directories for persistent data
-RUN mkdir -p /data /root/.rmapi
+# Create directories for persistent data and rmapi config
+RUN mkdir -p /data /root/.config/rmapi
+
+ENV PYTHONUNBUFFERED=1
 
 # Entrypoint script
 COPY entrypoint.sh /entrypoint.sh
