@@ -206,7 +206,11 @@ def render_page(settings: dict, message: str = "") -> str:
         auth_html = f"""
         <form method="POST" action="/auth" style="margin-top:0.5rem">
             <button type="submit" class="btn btn-auth">{auth_label}</button>
-        </form>"""
+        </form>
+        <div class="hint" style="margin-top:0.4rem">
+            You'll need a one-time code from
+            <a href="https://my.remarkable.com/device/browser/connect" target="_blank" style="color:#3b82f6">my.remarkable.com</a>
+        </div>"""
 
     # Sync status section
     sync_running_class = "pulse" if sync_state["running"] else ""
