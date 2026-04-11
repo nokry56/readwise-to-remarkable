@@ -448,7 +448,14 @@ hr {{ border: none; border-top: 1px solid #1e293b; margin: 1.25rem 0; }}
     </form>
 
     <div class="card" style="margin-top:1rem">
-        <h2 style="margin-top:0">Sync Log</h2>
+        <div style="display:flex;justify-content:space-between;align-items:center">
+            <h2 style="margin-top:0">Sync Log</h2>
+            <form method="POST" action="/reset-tracker" style="margin:0"
+                  onsubmit="return confirm('Reset tracker? All documents will be re-synced on next run.')">
+                <button type="submit" class="btn btn-sm" style="background:#ef4444;font-size:0.7rem;padding:0.25rem 0.6rem">
+                    Reset Tracker</button>
+            </form>
+        </div>
         <div style="font-size:0.8rem; color:{sync_status_color}" class="{sync_running_class}">
             {sync_status_text}
         </div>
@@ -492,6 +499,15 @@ class Handler(BaseHTTPRequestHandler):
             start_rmapi_auth()
             self.send_response(303)
             self.send_header("Location", "/")
+            self.end_headers()
+            return
+
+        if self.path == "/reset-tracker":
+            for p in [Path("/app/exported_documents.json"), Path("/data/exported_documents.json")]:
+                if p.exists():
+                    p.unlink()
+            self.send_response(303)
+            self.send_header("Location", "/?msg=Tracker+reset.+All+documents+will+re-sync+on+next+run.")
             self.end_headers()
             return
 
