@@ -33,6 +33,7 @@ tag = ${SYNC_TAG}
 
 [economist]
 enabled = ${ECONOMIST_ENABLED:-false}
+folder = ${ECONOMIST_FOLDER:-Economist}
 
 [highlights]
 enabled = ${HIGHLIGHT_SYNC_ENABLED:-false}
