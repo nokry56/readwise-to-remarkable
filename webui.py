@@ -35,6 +35,7 @@ def load_settings() -> dict:
         "sync_tag": os.environ.get("SYNC_TAG", "*"),
         "sync_interval": os.environ.get("SYNC_INTERVAL", "1800"),
         "economist_enabled": os.environ.get("ECONOMIST_ENABLED", "false"),
+        "economist_folder": os.environ.get("ECONOMIST_FOLDER", "Economist"),
         "highlight_sync_enabled": os.environ.get("HIGHLIGHT_SYNC_ENABLED", "false"),
     }
     if SETTINGS_FILE.exists():
@@ -67,6 +68,7 @@ tag = {settings['sync_tag']}
 
 [economist]
 enabled = {settings['economist_enabled']}
+folder = {settings['economist_folder']}
 
 [highlights]
 enabled = {settings['highlight_sync_enabled']}
@@ -248,23 +250,32 @@ def render_page(settings: dict, message: str = "") -> str:
             <a href="https://my.remarkable.com/device/browser/connect" target="_blank" style="color:#3b82f6">my.remarkable.com</a>
         </div>"""
 
-    # Sync status section
-    sync_running_class = "pulse" if sync_state["running"] else ""
-    if sync_state["running"]:
-        sync_status_text = "Running..."
-        sync_status_color = "#3b82f6"
-    elif sync_state["last_result"] == "success":
-        sync_status_text = f"Last sync: {sync_state['last_run']}"
-        sync_status_color = "#22c55e"
-    elif sync_state["last_result"] == "failed":
-        sync_status_text = f"Failed at {sync_state['last_run']}"
-        sync_status_color = "#ef4444"
-    else:
-        sync_status_text = "No manual sync run yet"
-        sync_status_color = "#64748b"
-
     # Build tabbed sync log from last 5 runs
     sync_runs = read_sync_runs(5)
+
+    # Sync status from log file (covers both manual and background syncs)
+    sync_running_class = ""
+    if sync_state["running"]:
+        sync_status_text = "Manual sync running..."
+        sync_status_color = "#3b82f6"
+        sync_running_class = "pulse"
+    elif sync_runs:
+        last_run = sync_runs[-1]
+        last_line = last_run["lines"][-1] if last_run["lines"] else ""
+        if "Next sync in" in last_line or "completed" in last_line.lower():
+            sync_status_text = f"Last: {last_run['header']}"
+            sync_status_color = "#22c55e"
+        elif "failed" in last_line.lower() or "error" in last_line.lower():
+            sync_status_text = f"Failed: {last_run['header']}"
+            sync_status_color = "#ef4444"
+        else:
+            # Sync might be in progress (no "Next sync" line yet)
+            sync_status_text = f"Running: {last_run['header']}"
+            sync_status_color = "#3b82f6"
+            sync_running_class = "pulse"
+    else:
+        sync_status_text = "No syncs yet"
+        sync_status_color = "#64748b"
     sync_log_html = ""
     if sync_runs:
         tabs_html = ""
@@ -304,6 +315,7 @@ def render_page(settings: dict, message: str = "") -> str:
         sync_log_html = '<div style="font-size:0.8rem;color:#64748b">No sync runs yet</div>'
 
     economist_checked = "checked" if settings["economist_enabled"].lower() == "true" else ""
+    economist_folder = settings.get("economist_folder", "Economist")
     highlight_checked = "checked" if settings["highlight_sync_enabled"].lower() == "true" else ""
 
     return f"""<!DOCTYPE html>
@@ -312,7 +324,7 @@ def render_page(settings: dict, message: str = "") -> str:
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Readwise → reMarkable</title>
-{"<meta http-equiv='refresh' content='3'>" if sync_state["running"] or auth_state["active"] else ""}
+{"<meta http-equiv='refresh' content='5'>" if sync_running_class or auth_state["active"] else ""}
 <style>
 * {{ margin: 0; padding: 0; box-sizing: border-box; }}
 body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -440,7 +452,12 @@ hr {{ border: none; border-top: 1px solid #1e293b; margin: 1.25rem 0; }}
         <h2 style="margin-top:0">Features</h2>
         <div class="check">
             <input type="checkbox" name="economist_enabled" id="econ" {economist_checked}>
-            <label for="econ">Weekly Economist PDF (via Readwise)</label>
+            <label for="econ">Weekly Economist PDF (direct to reMarkable)</label>
+        </div>
+        <div class="field" style="margin-left:1.6rem;margin-top:0.25rem">
+            <label>Economist Folder</label>
+            <input type="text" name="economist_folder" value="{economist_folder}">
+            <div class="hint">Folder on reMarkable for Economist PDFs</div>
         </div>
         <div class="check">
             <input type="checkbox" name="highlight_sync_enabled" id="hl" {highlight_checked}>
@@ -527,6 +544,7 @@ class Handler(BaseHTTPRequestHandler):
             settings["sync_tag"] = params.get("sync_tag", ["*"])[0]
             settings["sync_interval"] = params.get("sync_interval", ["1800"])[0]
             settings["economist_enabled"] = "true" if "economist_enabled" in params else "false"
+            settings["economist_folder"] = params.get("economist_folder", ["Economist"])[0]
             settings["highlight_sync_enabled"] = "true" if "highlight_sync_enabled" in params else "false"
 
             save_settings(settings)
