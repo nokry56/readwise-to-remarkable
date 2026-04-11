@@ -133,24 +133,42 @@ def run_manual_sync():
             lf.write(f"--- Manual sync started at {started} ---\n")
 
         try:
-            proc = subprocess.Popen(
-                ["python", "-u", "/app/sync.py"],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-            )
-            with log_file.open("a") as lf:
-                for line in proc.stdout:
-                    lf.write(line)
-            proc.wait(timeout=600)
+            settings = load_settings()
+            scripts = ["/app/sync.py"]
+            if settings.get("economist_enabled", "false").lower() == "true":
+                scripts.append("/app/economist.py")
+            if settings.get("highlight_sync_enabled", "false").lower() == "true":
+                scripts.append("/app/highlights.py")
+
+            all_ok = True
+            for script in scripts:
+                proc = subprocess.Popen(
+                    ["python", "-u", script],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                )
+                with log_file.open("a") as lf:
+                    for line in proc.stdout:
+                        lf.write(line)
+                proc.wait(timeout=600)
+                if proc.returncode != 0:
+                    all_ok = False
+
+            # Persist state
+            for src, dst in [
+                ("/app/exported_documents.json", "/data/exported_documents.json"),
+                ("/root/.config/rmapi/rmapi.conf", "/data/rmapi.conf"),
+            ]:
+                subprocess.run(["cp", src, dst], check=False, capture_output=True)
 
             with log_file.open("a") as lf:
-                if proc.returncode == 0:
+                if all_ok:
                     sync_state["last_result"] = "success"
                     lf.write("--- Manual sync completed successfully ---\n")
                 else:
                     sync_state["last_result"] = "failed"
-                    lf.write(f"--- Manual sync failed (exit code {proc.returncode}) ---\n")
+                    lf.write("--- Manual sync completed with errors ---\n")
         except Exception as e:
             sync_state["last_result"] = "error"
             with log_file.open("a") as lf:
