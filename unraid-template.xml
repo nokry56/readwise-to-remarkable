@@ -12,7 +12,7 @@
   <Category>Productivity:</Category>
   <WebUI>http://[IP]:[PORT:9080]</WebUI>
   <TemplateURL>https://raw.githubusercontent.com/nokry56/unraid-templates/main/readwise-remarkable.xml</TemplateURL>
-  <Icon>https://raw.githubusercontent.com/nokry56/readwise-to-remarkable/main/icon.svg</Icon>
+  <Icon>https://raw.githubusercontent.com/nokry56/readwise-to-remarkable/main/icon.png</Icon>
   <ExtraParams/>
   <Description>Syncs Readwise Reader articles to reMarkable tablet. Unseen documents get uploaded as EPUBs/PDFs. Archived or seen items are automatically removed. Highlights on reMarkable sync back to Readwise. Web UI for settings and rmapi authentication.</Description>
   <Config Name="Web UI Port" Target="9080" Default="9080" Mode="tcp" Description="Port for the settings web UI" Type="Port" Display="always" Required="true" Mask="false"/>
