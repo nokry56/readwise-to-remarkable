@@ -85,7 +85,7 @@ if [ "$1" = "once" ]; then
 fi
 
 # Start web UI in background
-WEBUI_PORT="${WEBUI_PORT:-8080}"
+WEBUI_PORT="${WEBUI_PORT:-9080}"
 python -u /webui.py &
 echo "Web UI started on port ${WEBUI_PORT}"
 

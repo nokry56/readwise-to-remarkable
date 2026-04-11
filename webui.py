@@ -10,6 +10,8 @@ import os
 import subprocess
 import threading
 import time
+from collections import deque
+from datetime import datetime, timezone
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
 from urllib.parse import parse_qs
@@ -18,13 +20,14 @@ SETTINGS_FILE = Path("/data/settings.json")
 CONFIG_FILE = Path("/app/config.cfg")
 RMAPI_CONF = Path("/root/.config/rmapi/rmapi.conf")
 RMAPI_CONF_PERSIST = Path("/data/rmapi.conf")
+SYNC_LOG_FILE = Path("/data/sync.log")
 
-# Global state for rmapi auth flow
+# Global state
 auth_state = {"active": False, "output": "", "success": False}
+sync_state = {"running": False, "last_run": "", "last_result": "", "log": deque(maxlen=50)}
 
 
 def load_settings() -> dict:
-    """Load settings from persistent storage, falling back to env vars."""
     defaults = {
         "readwise_token": os.environ.get("READWISE_TOKEN", ""),
         "remarkable_folder": os.environ.get("REMARKABLE_FOLDER", "Readwise"),
@@ -45,14 +48,12 @@ def load_settings() -> dict:
 
 
 def save_settings(settings: dict) -> None:
-    """Save settings to persistent storage and regenerate config.cfg."""
     with SETTINGS_FILE.open("w") as f:
         json.dump(settings, f, indent=2)
     regenerate_config(settings)
 
 
 def regenerate_config(settings: dict) -> None:
-    """Write config.cfg from current settings."""
     cfg = f"""[readwise]
 access_token = {settings['readwise_token']}
 
@@ -74,7 +75,6 @@ enabled = {settings['highlight_sync_enabled']}
 
 
 def check_rmapi_auth() -> bool:
-    """Check if rmapi is authenticated."""
     if not RMAPI_CONF.exists() and not RMAPI_CONF_PERSIST.exists():
         return False
     try:
@@ -88,7 +88,6 @@ def check_rmapi_auth() -> bool:
 
 
 def start_rmapi_auth():
-    """Start rmapi auth flow in a background thread."""
     auth_state["active"] = True
     auth_state["output"] = ""
     auth_state["success"] = False
@@ -109,13 +108,8 @@ def start_rmapi_auth():
             proc.wait(timeout=300)
             auth_state["success"] = proc.returncode == 0
 
-            if auth_state["success"]:
-                # Persist the auth token
-                if RMAPI_CONF.exists():
-                    subprocess.run(
-                        ["cp", str(RMAPI_CONF), str(RMAPI_CONF_PERSIST)],
-                        check=False,
-                    )
+            if auth_state["success"] and RMAPI_CONF.exists():
+                subprocess.run(["cp", str(RMAPI_CONF), str(RMAPI_CONF_PERSIST)], check=False)
         except Exception as e:
             auth_state["output"] += f"\nError: {e}"
         finally:
@@ -124,20 +118,79 @@ def start_rmapi_auth():
     threading.Thread(target=run_auth, daemon=True).start()
 
 
+def run_manual_sync():
+    sync_state["running"] = True
+    sync_state["log"].clear()
+
+    def do_sync():
+        started = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+        sync_state["last_run"] = started
+        sync_state["log"].append(f"--- Sync started at {started} ---")
+
+        try:
+            proc = subprocess.Popen(
+                ["python", "-u", "/app/sync.py"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+            )
+            for line in proc.stdout:
+                sync_state["log"].append(line.rstrip())
+            proc.wait(timeout=600)
+
+            if proc.returncode == 0:
+                sync_state["last_result"] = "success"
+                sync_state["log"].append("--- Sync completed successfully ---")
+            else:
+                sync_state["last_result"] = "failed"
+                sync_state["log"].append(f"--- Sync failed (exit code {proc.returncode}) ---")
+        except Exception as e:
+            sync_state["last_result"] = "error"
+            sync_state["log"].append(f"--- Sync error: {e} ---")
+        finally:
+            sync_state["running"] = False
+
+    threading.Thread(target=do_sync, daemon=True).start()
+
+
+def get_tracker_stats() -> dict:
+    tracker_file = Path("/app/exported_documents.json")
+    if not tracker_file.exists():
+        tracker_file = Path("/data/exported_documents.json")
+    if not tracker_file.exists():
+        return {"exported": 0, "highlights": 0}
+    try:
+        with tracker_file.open() as f:
+            data = json.load(f)
+        exported = len(data.get("exported", {}))
+        highlights = sum(
+            len(v.get("texts", [])) for v in data.get("highlights", {}).values()
+        )
+        return {"exported": exported, "highlights": highlights}
+    except Exception:
+        return {"exported": 0, "highlights": 0}
+
+
 def render_page(settings: dict, message: str = "") -> str:
-    """Render the settings page HTML."""
     rmapi_ok = check_rmapi_auth()
     rmapi_status = "Connected" if rmapi_ok else "Not authenticated"
     rmapi_color = "#22c55e" if rmapi_ok else "#ef4444"
+    rmapi_icon = "&#10003;" if rmapi_ok else "&#10007;"
 
-    token_display = settings["readwise_token"]
-    if len(token_display) > 8:
-        token_display = token_display[:4] + "..." + token_display[-4:]
+    token_val = settings["readwise_token"]
+    token_display = ""
+    if token_val and len(token_val) > 8:
+        token_display = token_val[:4] + "..." + token_val[-4:]
+    elif token_val:
+        token_display = "***"
+
+    stats = get_tracker_stats()
 
     msg_html = ""
     if message:
         msg_html = f'<div class="msg">{message}</div>'
 
+    # rmapi auth section — always visible
     auth_html = ""
     if auth_state["active"]:
         output_escaped = auth_state["output"].replace("<", "&lt;").replace(">", "&gt;")
@@ -146,13 +199,35 @@ def render_page(settings: dict, message: str = "") -> str:
             <h3>Authentication in progress...</h3>
             <pre>{output_escaped}</pre>
             <p>Follow the instructions above in your browser, then refresh this page.</p>
-            <a href="/" class="btn">Refresh</a>
+            <a href="/" class="btn" style="margin-top:0.5rem">Refresh</a>
         </div>"""
-    elif not rmapi_ok:
-        auth_html = """
-        <form method="POST" action="/auth">
-            <button type="submit" class="btn btn-auth">Start reMarkable Authentication</button>
+    else:
+        auth_label = "Re-authenticate reMarkable" if rmapi_ok else "Authenticate reMarkable"
+        auth_html = f"""
+        <form method="POST" action="/auth" style="margin-top:0.5rem">
+            <button type="submit" class="btn btn-auth">{auth_label}</button>
         </form>"""
+
+    # Sync status section
+    sync_running_class = "pulse" if sync_state["running"] else ""
+    if sync_state["running"]:
+        sync_status_text = "Running..."
+        sync_status_color = "#3b82f6"
+    elif sync_state["last_result"] == "success":
+        sync_status_text = f"Last sync: {sync_state['last_run']}"
+        sync_status_color = "#22c55e"
+    elif sync_state["last_result"] == "failed":
+        sync_status_text = f"Failed at {sync_state['last_run']}"
+        sync_status_color = "#ef4444"
+    else:
+        sync_status_text = "No manual sync run yet"
+        sync_status_color = "#64748b"
+
+    sync_log_html = ""
+    if sync_state["log"]:
+        log_lines = "\n".join(sync_state["log"])
+        log_escaped = log_lines.replace("<", "&lt;").replace(">", "&gt;")
+        sync_log_html = f'<pre class="log-box">{log_escaped}</pre>'
 
     economist_checked = "checked" if settings["economist_enabled"].lower() == "true" else ""
     highlight_checked = "checked" if settings["highlight_sync_enabled"].lower() == "true" else ""
@@ -163,106 +238,152 @@ def render_page(settings: dict, message: str = "") -> str:
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Readwise → reMarkable</title>
+{"<meta http-equiv='refresh' content='3'>" if sync_state["running"] or auth_state["active"] else ""}
 <style>
 * {{ margin: 0; padding: 0; box-sizing: border-box; }}
 body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-       background: #0f172a; color: #e2e8f0; padding: 2rem; }}
+       background: #0f172a; color: #e2e8f0; padding: 1.5rem; }}
 .container {{ max-width: 640px; margin: 0 auto; }}
-h1 {{ font-size: 1.5rem; margin-bottom: 0.5rem; color: #f8fafc; }}
-h2 {{ font-size: 1.1rem; margin: 1.5rem 0 0.75rem; color: #94a3b8;
+h1 {{ font-size: 1.5rem; margin-bottom: 1rem; color: #f8fafc; }}
+h2 {{ font-size: 1rem; margin: 1.25rem 0 0.6rem; color: #94a3b8;
       text-transform: uppercase; letter-spacing: 0.05em; font-weight: 500; }}
-.status {{ display: inline-flex; align-items: center; gap: 0.5rem;
-           padding: 0.25rem 0.75rem; border-radius: 1rem;
-           background: #1e293b; font-size: 0.875rem; margin-bottom: 1rem; }}
-.dot {{ width: 8px; height: 8px; border-radius: 50%; background: {rmapi_color}; }}
-.msg {{ background: #164e63; padding: 0.75rem 1rem; border-radius: 0.5rem;
-        margin-bottom: 1rem; font-size: 0.875rem; }}
-.field {{ margin-bottom: 1rem; }}
-label {{ display: block; font-size: 0.8rem; color: #94a3b8; margin-bottom: 0.25rem;
-         text-transform: uppercase; letter-spacing: 0.05em; }}
+
+.status-bar {{ display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; }}
+.status-pill {{ display: inline-flex; align-items: center; gap: 0.4rem;
+               padding: 0.3rem 0.75rem; border-radius: 1rem;
+               background: #1e293b; font-size: 0.8rem; }}
+.dot {{ width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }}
+.stat {{ font-variant-numeric: tabular-nums; }}
+
+.msg {{ background: #164e63; padding: 0.6rem 0.875rem; border-radius: 0.5rem;
+        margin-bottom: 1rem; font-size: 0.85rem; }}
+.card {{ background: #1e293b; border-radius: 0.5rem; padding: 1rem;
+         margin-bottom: 1rem; border: 1px solid #334155; }}
+
+.field {{ margin-bottom: 0.875rem; }}
+label {{ display: block; font-size: 0.75rem; color: #94a3b8; margin-bottom: 0.2rem;
+         text-transform: uppercase; letter-spacing: 0.04em; }}
 input[type="text"], input[type="password"], input[type="number"] {{
-    width: 100%; padding: 0.625rem 0.75rem; background: #1e293b; border: 1px solid #334155;
-    border-radius: 0.375rem; color: #e2e8f0; font-size: 0.9rem; }}
+    width: 100%; padding: 0.5rem 0.625rem; background: #0f172a; border: 1px solid #334155;
+    border-radius: 0.375rem; color: #e2e8f0; font-size: 0.875rem; }}
 input:focus {{ outline: none; border-color: #3b82f6; }}
-.check {{ display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; }}
-.check input {{ width: 1.1rem; height: 1.1rem; accent-color: #3b82f6; }}
-.check label {{ margin: 0; text-transform: none; font-size: 0.9rem; color: #e2e8f0; }}
-.hint {{ font-size: 0.75rem; color: #64748b; margin-top: 0.25rem; }}
-.btn {{ display: inline-block; padding: 0.625rem 1.5rem; background: #3b82f6;
-        color: white; border: none; border-radius: 0.375rem; font-size: 0.9rem;
+.check {{ display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.6rem; }}
+.check input {{ width: 1rem; height: 1rem; accent-color: #3b82f6; }}
+.check label {{ margin: 0; text-transform: none; font-size: 0.875rem; color: #e2e8f0; }}
+.hint {{ font-size: 0.7rem; color: #64748b; margin-top: 0.15rem; }}
+
+.btn {{ display: inline-block; padding: 0.5rem 1.25rem; background: #3b82f6;
+        color: white; border: none; border-radius: 0.375rem; font-size: 0.85rem;
         cursor: pointer; text-decoration: none; }}
 .btn:hover {{ background: #2563eb; }}
-.btn-auth {{ background: #f59e0b; }}
+.btn-auth {{ background: #f59e0b; color: #0f172a; font-weight: 500; }}
 .btn-auth:hover {{ background: #d97706; }}
 .btn-sync {{ background: #22c55e; }}
 .btn-sync:hover {{ background: #16a34a; }}
-.actions {{ display: flex; gap: 0.75rem; margin-top: 1.5rem; }}
-.auth-box {{ background: #1e293b; padding: 1rem; border-radius: 0.5rem;
-             margin: 1rem 0; border: 1px solid #334155; }}
-.auth-box pre {{ background: #0f172a; padding: 0.75rem; border-radius: 0.25rem;
-                 font-size: 0.8rem; overflow-x: auto; margin: 0.5rem 0;
+.btn-sm {{ padding: 0.35rem 0.75rem; font-size: 0.8rem; }}
+.actions {{ display: flex; gap: 0.6rem; margin-top: 1.25rem; }}
+
+.auth-box {{ background: #1e293b; padding: 0.875rem; border-radius: 0.5rem;
+             margin: 0.75rem 0; border: 1px solid #334155; }}
+.auth-box pre {{ background: #0f172a; padding: 0.625rem; border-radius: 0.25rem;
+                 font-size: 0.75rem; overflow-x: auto; margin: 0.4rem 0;
                  white-space: pre-wrap; word-break: break-all; }}
-hr {{ border: none; border-top: 1px solid #1e293b; margin: 1.5rem 0; }}
-.footer {{ font-size: 0.75rem; color: #475569; margin-top: 2rem; text-align: center; }}
+.log-box {{ background: #0f172a; padding: 0.625rem; border-radius: 0.25rem;
+            font-size: 0.7rem; max-height: 200px; overflow-y: auto;
+            margin-top: 0.5rem; white-space: pre-wrap; word-break: break-word;
+            color: #94a3b8; line-height: 1.4; }}
+
+hr {{ border: none; border-top: 1px solid #1e293b; margin: 1.25rem 0; }}
+.footer {{ font-size: 0.7rem; color: #475569; margin-top: 1.5rem; text-align: center; }}
+
+@keyframes pulse {{ 0%,100% {{ opacity: 1; }} 50% {{ opacity: 0.4; }} }}
+.pulse {{ animation: pulse 1.5s infinite; }}
 </style>
 </head>
 <body>
 <div class="container">
     <h1>Readwise → reMarkable</h1>
-    <div class="status"><span class="dot"></span> reMarkable: {rmapi_status}</div>
-    {auth_html}
+
+    <div class="status-bar">
+        <div class="status-pill"><span class="dot" style="background:{rmapi_color}"></span> reMarkable: {rmapi_status}</div>
+        <div class="status-pill"><span class="stat">{stats['exported']}</span> docs synced</div>
+        <div class="status-pill"><span class="stat">{stats['highlights']}</span> highlights</div>
+    </div>
+
     {msg_html}
 
+    <div class="card">
+        <h2 style="margin-top:0">reMarkable Cloud</h2>
+        <div style="font-size:0.85rem; margin-bottom:0.5rem">
+            Status: <span style="color:{rmapi_color}">{rmapi_icon} {rmapi_status}</span>
+        </div>
+        {auth_html}
+    </div>
+
     <form method="POST" action="/settings">
-    <h2>Readwise</h2>
-    <div class="field">
-        <label>Access Token</label>
-        <input type="password" name="readwise_token" value="{settings['readwise_token']}"
-               placeholder="Get from readwise.io/access_token">
-        <div class="hint">Current: {token_display}</div>
+    <div class="card">
+        <h2 style="margin-top:0">Readwise</h2>
+        <div class="field">
+            <label>Access Token</label>
+            <input type="password" name="readwise_token" value="{settings['readwise_token']}"
+                   placeholder="Get from readwise.io/access_token">
+            <div class="hint">Current: {token_display or 'not set'} &middot;
+                <a href="https://readwise.io/access_token" target="_blank" style="color:#3b82f6">Get your token</a></div>
+        </div>
     </div>
 
-    <h2>reMarkable</h2>
-    <div class="field">
-        <label>Upload Folder</label>
-        <input type="text" name="remarkable_folder" value="{settings['remarkable_folder']}">
+    <div class="card">
+        <h2 style="margin-top:0">Sync Settings</h2>
+        <div class="field">
+            <label>Upload Folder</label>
+            <input type="text" name="remarkable_folder" value="{settings['remarkable_folder']}">
+        </div>
+        <div class="field">
+            <label>Locations</label>
+            <input type="text" name="sync_locations" value="{settings['sync_locations']}">
+            <div class="hint">Comma-separated: new, later, shortlist, feed</div>
+        </div>
+        <div class="field">
+            <label>Tag Filter</label>
+            <input type="text" name="sync_tag" value="{settings['sync_tag']}">
+            <div class="hint">Use * for all documents</div>
+        </div>
+        <div class="field">
+            <label>Sync Interval (seconds)</label>
+            <input type="number" name="sync_interval" value="{settings['sync_interval']}" min="60">
+            <div class="hint">1800 = 30 minutes</div>
+        </div>
     </div>
 
-    <h2>Sync</h2>
-    <div class="field">
-        <label>Locations</label>
-        <input type="text" name="sync_locations" value="{settings['sync_locations']}">
-        <div class="hint">Comma-separated: new, later, shortlist, feed</div>
-    </div>
-    <div class="field">
-        <label>Tag Filter</label>
-        <input type="text" name="sync_tag" value="{settings['sync_tag']}">
-        <div class="hint">Use * for all documents</div>
-    </div>
-    <div class="field">
-        <label>Sync Interval (seconds)</label>
-        <input type="number" name="sync_interval" value="{settings['sync_interval']}" min="60">
-        <div class="hint">1800 = 30 minutes</div>
-    </div>
-
-    <h2>Features</h2>
-    <div class="check">
-        <input type="checkbox" name="economist_enabled" id="econ" {economist_checked}>
-        <label for="econ">Weekly Economist PDF (via Readwise)</label>
-    </div>
-    <div class="check">
-        <input type="checkbox" name="highlight_sync_enabled" id="hl" {highlight_checked}>
-        <label for="hl">Highlight sync (reMarkable → Readwise)</label>
+    <div class="card">
+        <h2 style="margin-top:0">Features</h2>
+        <div class="check">
+            <input type="checkbox" name="economist_enabled" id="econ" {economist_checked}>
+            <label for="econ">Weekly Economist PDF (via Readwise)</label>
+        </div>
+        <div class="check">
+            <input type="checkbox" name="highlight_sync_enabled" id="hl" {highlight_checked}>
+            <label for="hl">Highlight sync (reMarkable → Readwise)</label>
+        </div>
     </div>
 
     <div class="actions">
         <button type="submit" class="btn">Save Settings</button>
-        <a href="/sync" class="btn btn-sync">Run Sync Now</a>
+        <a href="/sync" class="btn btn-sync {"" if not sync_state["running"] else "pulse"}">
+            {"Running..." if sync_state["running"] else "Run Sync Now"}</a>
     </div>
     </form>
 
+    <div class="card" style="margin-top:1rem">
+        <h2 style="margin-top:0">Sync Log</h2>
+        <div style="font-size:0.8rem; color:{sync_status_color}" class="{sync_running_class}">
+            {sync_status_text}
+        </div>
+        {sync_log_html}
+    </div>
+
     <hr>
-    <div class="footer">readwise-to-remarkable &middot; Settings are saved to /data and persist across restarts</div>
+    <div class="footer">readwise-to-remarkable &middot; Settings saved to /data &middot; <a href="/" style="color:#64748b">Refresh</a></div>
 </div>
 </body>
 </html>"""
@@ -271,14 +392,8 @@ hr {{ border: none; border-top: 1px solid #1e293b; margin: 1.5rem 0; }}
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == "/sync":
-            # Trigger a manual sync in background
-            threading.Thread(
-                target=lambda: subprocess.run(
-                    ["python", "-u", "/app/sync.py"],
-                    capture_output=True,
-                ),
-                daemon=True,
-            ).start()
+            if not sync_state["running"]:
+                run_manual_sync()
             self.send_response(303)
             self.send_header("Location", "/?msg=Sync+triggered")
             self.end_headers()
@@ -328,7 +443,6 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def log_message(self, format, *args):
-        # Suppress default access logs
         pass
 
 
@@ -339,5 +453,5 @@ def run(port: int = 8080):
 
 
 if __name__ == "__main__":
-    port = int(os.environ.get("WEBUI_PORT", "8080"))
+    port = int(os.environ.get("WEBUI_PORT", "9080"))
     run(port)

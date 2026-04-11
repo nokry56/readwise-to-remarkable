@@ -10,12 +10,12 @@
   <Project>https://github.com/donmerendolo/readwise-to-remarkable</Project>
   <Overview>Sync Readwise Reader to reMarkable with auto-cleanup, highlight sync, and web UI for settings and rmapi auth.</Overview>
   <Category>Productivity:</Category>
-  <WebUI>http://[IP]:[PORT:8080]</WebUI>
+  <WebUI>http://[IP]:[PORT:9080]</WebUI>
   <TemplateURL>https://raw.githubusercontent.com/nokry56/unraid-templates/main/readwise-remarkable.xml</TemplateURL>
   <Icon>https://raw.githubusercontent.com/donmerendolo/readwise-to-remarkable/master/image.png</Icon>
   <ExtraParams/>
   <Description>Syncs Readwise Reader articles to reMarkable tablet. Unseen documents get uploaded as EPUBs/PDFs. Archived or seen items are automatically removed. Highlights on reMarkable sync back to Readwise. Web UI for settings and rmapi authentication.</Description>
-  <Config Name="Web UI Port" Target="8080" Default="8080" Mode="tcp" Description="Port for the settings web UI" Type="Port" Display="always" Required="true" Mask="false"/>
+  <Config Name="Web UI Port" Target="9080" Default="9080" Mode="tcp" Description="Port for the settings web UI" Type="Port" Display="always" Required="true" Mask="false"/>
   <Config Name="Readwise Token" Target="READWISE_TOKEN" Default="" Mode="" Description="Your Readwise access token from https://readwise.io/access_token (can also be set via web UI)" Type="Variable" Display="always" Required="false" Mask="true"/>
   <Config Name="reMarkable Folder" Target="REMARKABLE_FOLDER" Default="Readwise" Mode="" Description="Folder on reMarkable where documents are uploaded" Type="Variable" Display="always" Required="false" Mask="false"/>
   <Config Name="Sync Locations" Target="SYNC_LOCATIONS" Default="new,later,shortlist,feed" Mode="" Description="Readwise locations to sync from (comma-separated)" Type="Variable" Display="always" Required="false" Mask="false"/>
