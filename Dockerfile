@@ -18,6 +18,8 @@ RUN curl -fsSL "https://github.com/ddvk/rmapi/releases/download/v${RMAPI_VERSION
 WORKDIR /app
 
 # Clone the repo and install Python deps
+# CACHEBUST ensures fresh clone on every build (set by GitHub Actions)
+ARG CACHEBUST=1
 RUN apt-get update && apt-get install -y --no-install-recommends git \
     && git clone https://github.com/nokry56/readwise-to-remarkable-fork.git . \
     && apt-get purge -y git && apt-get autoremove -y \
