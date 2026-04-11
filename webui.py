@@ -272,10 +272,18 @@ def render_page(settings: dict, message: str = "") -> str:
         for i, run in enumerate(reversed(sync_runs)):  # newest first
             active_tab = "tab-active" if i == 0 else ""
             active_panel = "" if i == 0 else "display:none"
-            label = run["header"].replace("Sync started at ", "").replace("Manual sync started at ", "M: ")
-            # Shorten to just time
-            if len(label) > 20:
-                label = label.split()[-2] if len(label.split()) >= 2 else label[-20:]
+            header = run["header"]
+            is_manual = "Manual" in header
+            # Extract just the time portion from headers like:
+            #   "Sync started at Thu Apr 10 20:55:30 CDT 2026"
+            #   "Manual sync started at 2026-04-11 02:01:48 UTC"
+            parts = header.split()
+            # Find the part that looks like HH:MM:SS
+            label = header[-20:]  # fallback
+            for p in parts:
+                if ":" in p and len(p) >= 7:
+                    label = ("M " if is_manual else "") + p
+                    break
             log_text = "\n".join(run["lines"])
             log_escaped = log_text.replace("<", "&lt;").replace(">", "&gt;")
             tabs_html += f'<button class="tab {active_tab}" onclick="showTab({i})" id="tab-{i}">{label}</button>'
