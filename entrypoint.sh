@@ -100,8 +100,16 @@ echo "  Highlight sync: ${HIGHLIGHT_SYNC_ENABLED:-false}"
 echo "  Web UI: http://0.0.0.0:${WEBUI_PORT}"
 echo ""
 
+SYNC_LOG="/data/sync.log"
+# Keep last 2000 lines of log history
+truncate_log() {
+    if [ -f "$SYNC_LOG" ] && [ "$(wc -l < "$SYNC_LOG")" -gt 2000 ]; then
+        tail -1000 "$SYNC_LOG" > "$SYNC_LOG.tmp" && mv "$SYNC_LOG.tmp" "$SYNC_LOG"
+    fi
+}
+
 while true; do
-    echo "--- Sync started at $(date) ---"
+    echo "--- Sync started at $(date) ---" | tee -a "$SYNC_LOG"
 
     # Re-read settings before each sync (web UI may have changed them)
     if [ -f "$SETTINGS_FILE" ]; then
@@ -109,20 +117,21 @@ while true; do
         HIGHLIGHT_SYNC_ENABLED=$(python -c "import json; d=json.load(open('$SETTINGS_FILE')); print(d.get('highlight_sync_enabled','false'))" 2>/dev/null || echo "false")
     fi
 
-    python -u sync.py || echo "Sync failed, will retry next interval"
+    python -u sync.py 2>&1 | tee -a "$SYNC_LOG" || echo "Sync failed, will retry next interval" | tee -a "$SYNC_LOG"
 
     if [ "${ECONOMIST_ENABLED:-false}" = "true" ]; then
-        python -u economist.py || echo "Economist sync failed, will retry next interval"
+        python -u economist.py 2>&1 | tee -a "$SYNC_LOG" || echo "Economist sync failed, will retry next interval" | tee -a "$SYNC_LOG"
     fi
 
     if [ "${HIGHLIGHT_SYNC_ENABLED:-false}" = "true" ]; then
-        python -u highlights.py || echo "Highlight sync failed, will retry next interval"
+        python -u highlights.py 2>&1 | tee -a "$SYNC_LOG" || echo "Highlight sync failed, will retry next interval" | tee -a "$SYNC_LOG"
     fi
 
     # Persist state after each run
     cp /app/exported_documents.json /data/exported_documents.json 2>/dev/null || true
     cp "${RMAPI_CONF}" /data/rmapi.conf 2>/dev/null || true
 
-    echo "--- Next sync in ${SYNC_INTERVAL}s ---"
+    echo "--- Next sync in ${SYNC_INTERVAL}s ---" | tee -a "$SYNC_LOG"
+    truncate_log
     sleep "${SYNC_INTERVAL}"
 done

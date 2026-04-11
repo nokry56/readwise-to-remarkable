@@ -24,7 +24,7 @@ SYNC_LOG_FILE = Path("/data/sync.log")
 
 # Global state
 auth_state = {"active": False, "output": "", "success": False}
-sync_state = {"running": False, "last_run": "", "last_result": "", "log": deque(maxlen=50)}
+sync_state = {"running": False, "last_run": "", "last_result": "", "log": deque(maxlen=500)}
 
 
 def load_settings() -> dict:
@@ -119,13 +119,16 @@ def start_rmapi_auth():
 
 
 def run_manual_sync():
+    """Trigger a manual sync that writes to the shared log file."""
     sync_state["running"] = True
-    sync_state["log"].clear()
 
     def do_sync():
+        log_file = Path("/data/sync.log")
         started = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
         sync_state["last_run"] = started
-        sync_state["log"].append(f"--- Sync started at {started} ---")
+
+        with log_file.open("a") as lf:
+            lf.write(f"--- Manual sync started at {started} ---\n")
 
         try:
             proc = subprocess.Popen(
@@ -134,23 +137,56 @@ def run_manual_sync():
                 stderr=subprocess.STDOUT,
                 text=True,
             )
-            for line in proc.stdout:
-                sync_state["log"].append(line.rstrip())
+            with log_file.open("a") as lf:
+                for line in proc.stdout:
+                    lf.write(line)
             proc.wait(timeout=600)
 
-            if proc.returncode == 0:
-                sync_state["last_result"] = "success"
-                sync_state["log"].append("--- Sync completed successfully ---")
-            else:
-                sync_state["last_result"] = "failed"
-                sync_state["log"].append(f"--- Sync failed (exit code {proc.returncode}) ---")
+            with log_file.open("a") as lf:
+                if proc.returncode == 0:
+                    sync_state["last_result"] = "success"
+                    lf.write("--- Manual sync completed successfully ---\n")
+                else:
+                    sync_state["last_result"] = "failed"
+                    lf.write(f"--- Manual sync failed (exit code {proc.returncode}) ---\n")
         except Exception as e:
             sync_state["last_result"] = "error"
-            sync_state["log"].append(f"--- Sync error: {e} ---")
+            with log_file.open("a") as lf:
+                lf.write(f"--- Manual sync error: {e} ---\n")
         finally:
             sync_state["running"] = False
 
     threading.Thread(target=do_sync, daemon=True).start()
+
+
+def read_sync_runs(max_runs: int = 5) -> list[dict]:
+    """Parse the sync log into individual runs. Returns list of {header, lines}."""
+    log_file = Path("/data/sync.log")
+    if not log_file.exists():
+        return []
+    try:
+        text = log_file.read_text(encoding="utf-8", errors="replace")
+    except Exception:
+        return []
+
+    runs = []
+    current_lines = []
+    current_header = ""
+
+    for line in text.splitlines():
+        if line.startswith("--- Sync started at ") or line.startswith("--- Manual sync started at "):
+            if current_header and current_lines:
+                runs.append({"header": current_header, "lines": current_lines})
+            current_header = line.strip("- ")
+            current_lines = [line]
+        elif current_header:
+            current_lines.append(line)
+
+    # Don't forget the last run
+    if current_header and current_lines:
+        runs.append({"header": current_header, "lines": current_lines})
+
+    return runs[-max_runs:]
 
 
 def get_tracker_stats() -> dict:
@@ -227,11 +263,37 @@ def render_page(settings: dict, message: str = "") -> str:
         sync_status_text = "No manual sync run yet"
         sync_status_color = "#64748b"
 
+    # Build tabbed sync log from last 5 runs
+    sync_runs = read_sync_runs(5)
     sync_log_html = ""
-    if sync_state["log"]:
-        log_lines = "\n".join(sync_state["log"])
-        log_escaped = log_lines.replace("<", "&lt;").replace(">", "&gt;")
-        sync_log_html = f'<pre class="log-box">{log_escaped}</pre>'
+    if sync_runs:
+        tabs_html = ""
+        panels_html = ""
+        for i, run in enumerate(reversed(sync_runs)):  # newest first
+            active_tab = "tab-active" if i == 0 else ""
+            active_panel = "" if i == 0 else "display:none"
+            label = run["header"].replace("Sync started at ", "").replace("Manual sync started at ", "M: ")
+            # Shorten to just time
+            if len(label) > 20:
+                label = label.split()[-2] if len(label.split()) >= 2 else label[-20:]
+            log_text = "\n".join(run["lines"])
+            log_escaped = log_text.replace("<", "&lt;").replace(">", "&gt;")
+            tabs_html += f'<button class="tab {active_tab}" onclick="showTab({i})" id="tab-{i}">{label}</button>'
+            panels_html += f'<pre class="log-box" id="panel-{i}" style="{active_panel}">{log_escaped}</pre>'
+
+        sync_log_html = f"""
+        <div class="tabs">{tabs_html}</div>
+        {panels_html}
+        <script>
+        function showTab(n) {{
+            document.querySelectorAll('.log-box').forEach(p => p.style.display='none');
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('tab-active'));
+            document.getElementById('panel-'+n).style.display='block';
+            document.getElementById('tab-'+n).classList.add('tab-active');
+        }}
+        </script>"""
+    else:
+        sync_log_html = '<div style="font-size:0.8rem;color:#64748b">No sync runs yet</div>'
 
     economist_checked = "checked" if settings["economist_enabled"].lower() == "true" else ""
     highlight_checked = "checked" if settings["highlight_sync_enabled"].lower() == "true" else ""
@@ -293,12 +355,19 @@ input:focus {{ outline: none; border-color: #3b82f6; }}
                  font-size: 0.75rem; overflow-x: auto; margin: 0.4rem 0;
                  white-space: pre-wrap; word-break: break-all; }}
 .log-box {{ background: #0f172a; padding: 0.625rem; border-radius: 0.25rem;
-            font-size: 0.7rem; max-height: 200px; overflow-y: auto;
-            margin-top: 0.5rem; white-space: pre-wrap; word-break: break-word;
+            font-size: 0.7rem; max-height: 500px; overflow-y: auto;
+            white-space: pre-wrap; word-break: break-word;
             color: #94a3b8; line-height: 1.4; }}
 
 hr {{ border: none; border-top: 1px solid #1e293b; margin: 1.25rem 0; }}
 .footer {{ font-size: 0.7rem; color: #475569; margin-top: 1.5rem; text-align: center; }}
+
+.tabs {{ display: flex; gap: 0.25rem; margin-bottom: 0; flex-wrap: wrap; }}
+.tab {{ background: #0f172a; border: 1px solid #334155; border-bottom: none;
+        padding: 0.3rem 0.6rem; border-radius: 0.25rem 0.25rem 0 0;
+        color: #64748b; font-size: 0.7rem; cursor: pointer; }}
+.tab-active {{ background: #1e293b; color: #e2e8f0; border-color: #475569; }}
+.tabs + .log-box {{ border-radius: 0 0.25rem 0.25rem 0.25rem; }}
 
 @keyframes pulse {{ 0%,100% {{ opacity: 1; }} 50% {{ opacity: 0.4; }} }}
 .pulse {{ animation: pulse 1.5s infinite; }}
