@@ -109,6 +109,11 @@ truncate_log() {
     fi
 }
 
+# Per-step timeout. A hung sync.py was previously blocking the loop for weeks
+# because a child process stayed in a TCP socket wait forever. timeout(1) sends
+# SIGTERM at the deadline and SIGKILL 30s later, so the loop can always advance.
+SYNC_TIMEOUT="${SYNC_TIMEOUT:-1500}"
+
 while true; do
     echo "--- Sync started at $(date) ---" | tee -a "$SYNC_LOG"
 
@@ -118,14 +123,32 @@ while true; do
         HIGHLIGHT_SYNC_ENABLED=$(python -c "import json; d=json.load(open('$SETTINGS_FILE')); print(d.get('highlight_sync_enabled','false'))" 2>/dev/null || echo "false")
     fi
 
-    python -u sync.py 2>&1 | tee -a "$SYNC_LOG" || echo "Sync failed, will retry next interval" | tee -a "$SYNC_LOG"
+    timeout --kill-after=30s "${SYNC_TIMEOUT}s" python -u sync.py 2>&1 | tee -a "$SYNC_LOG"
+    rc=${PIPESTATUS[0]}
+    if [ "$rc" = "124" ] || [ "$rc" = "137" ]; then
+        echo "Sync timed out after ${SYNC_TIMEOUT}s (rc=$rc), will retry next interval" | tee -a "$SYNC_LOG"
+    elif [ "$rc" != "0" ]; then
+        echo "Sync failed (rc=$rc), will retry next interval" | tee -a "$SYNC_LOG"
+    fi
 
     if [ "${ECONOMIST_ENABLED:-false}" = "true" ]; then
-        python -u economist.py 2>&1 | tee -a "$SYNC_LOG" || echo "Economist sync failed, will retry next interval" | tee -a "$SYNC_LOG"
+        timeout --kill-after=30s "${SYNC_TIMEOUT}s" python -u economist.py 2>&1 | tee -a "$SYNC_LOG"
+        rc=${PIPESTATUS[0]}
+        if [ "$rc" = "124" ] || [ "$rc" = "137" ]; then
+            echo "Economist sync timed out after ${SYNC_TIMEOUT}s (rc=$rc), will retry next interval" | tee -a "$SYNC_LOG"
+        elif [ "$rc" != "0" ]; then
+            echo "Economist sync failed (rc=$rc), will retry next interval" | tee -a "$SYNC_LOG"
+        fi
     fi
 
     if [ "${HIGHLIGHT_SYNC_ENABLED:-false}" = "true" ]; then
-        python -u highlights.py 2>&1 | tee -a "$SYNC_LOG" || echo "Highlight sync failed, will retry next interval" | tee -a "$SYNC_LOG"
+        timeout --kill-after=30s "${SYNC_TIMEOUT}s" python -u highlights.py 2>&1 | tee -a "$SYNC_LOG"
+        rc=${PIPESTATUS[0]}
+        if [ "$rc" = "124" ] || [ "$rc" = "137" ]; then
+            echo "Highlight sync timed out after ${SYNC_TIMEOUT}s (rc=$rc), will retry next interval" | tee -a "$SYNC_LOG"
+        elif [ "$rc" != "0" ]; then
+            echo "Highlight sync failed (rc=$rc), will retry next interval" | tee -a "$SYNC_LOG"
+        fi
     fi
 
     # Persist state after each run
